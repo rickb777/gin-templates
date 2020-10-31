@@ -5,9 +5,11 @@ import (
 	"github.com/gin-gonic/gin/render"
 	"html/template"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type htmlProduction struct {
@@ -15,8 +17,9 @@ type htmlProduction struct {
 }
 
 type htmlDebug struct {
+	root    *template.Template
 	rootDir string
-	files   map[string]os.FileInfo
+	files   map[string]time.Time
 	funcMap template.FuncMap
 }
 
@@ -40,10 +43,18 @@ func LoadTemplates(dir, suffix string, funcMap template.FuncMap) render.HTMLRend
 	parseTemplates(root, rootDir, files, funcMap)
 
 	if gin.IsDebugging() {
-		return htmlDebug{rootDir: rootDir, files: files, funcMap: funcMap}
+		return htmlDebug{rootDir: rootDir, root: root, files: files, funcMap: funcMap}
 	}
 
 	return htmlProduction{root: root}
+}
+
+func (r htmlProduction) Instance(name string, data interface{}) render.Render {
+	return render.HTML{
+		Template: r.root,
+		Name:     name,
+		Data:     data,
+	}
 }
 
 func (r htmlDebug) Instance(name string, data interface{}) render.Render {
@@ -55,21 +66,30 @@ func (r htmlDebug) Instance(name string, data interface{}) render.Render {
 }
 
 func (r htmlDebug) loadTemplate() *template.Template {
-	// TODO filter out files that haven't changed
-	return parseTemplates(template.New(""), r.rootDir, r.files, r.funcMap)
+	changed := checkForChanges(r.files)
+	return parseTemplates(r.root, r.rootDir, changed, r.funcMap)
 }
 
-func (r htmlProduction) Instance(name string, data interface{}) render.Render {
-	return render.HTML{
-		Template: r.root,
-		Name:     name,
-		Data:     data,
+func checkForChanges(files map[string]time.Time) map[string]time.Time {
+	changed := make(map[string]time.Time)
+	for path, modTime := range files {
+		fi, err := os.Stat(path)
+		if err == nil {
+			if fi.ModTime().After(modTime) {
+				files[path] = fi.ModTime()
+				changed[path] = fi.ModTime()
+			}
+		} else {
+			log.Printf("%q err %v\n", path, err)
+		}
 	}
+
+	return changed
 }
 
-func findTemplates(rootDir, suffix string) map[string]os.FileInfo {
+func findTemplates(rootDir, suffix string) map[string]time.Time {
 	cleanRoot := filepath.Clean(rootDir)
-	files := make(map[string]os.FileInfo)
+	files := make(map[string]time.Time)
 
 	err := filepath.Walk(cleanRoot, func(path string, info os.FileInfo, e1 error) error {
 		if e1 != nil {
@@ -77,7 +97,7 @@ func findTemplates(rootDir, suffix string) map[string]os.FileInfo {
 		}
 
 		if !info.IsDir() && strings.HasSuffix(path, suffix) {
-			files[path] = info
+			files[path] = time.Time{}
 		}
 
 		return nil
@@ -90,7 +110,7 @@ func findTemplates(rootDir, suffix string) map[string]os.FileInfo {
 	return files
 }
 
-func parseTemplates(root *template.Template, rootDir string, files map[string]os.FileInfo, funcMap template.FuncMap) *template.Template {
+func parseTemplates(root *template.Template, rootDir string, files map[string]time.Time, funcMap template.FuncMap) *template.Template {
 	pfx := len(rootDir) + 1
 
 	for path := range files {

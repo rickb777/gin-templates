@@ -18,8 +18,8 @@
 Given a directory `templates` containing your templates and given that their names all end in ".html", use this setup
 
 ```go
-	engine := gin.New()
-	engine.HTMLRender := gin_templates.LoadTemplates(engine, "templates", ".html")
+engine := gin.New()
+engine.HTMLRender := gin_templates.LoadTemplates(engine, "templates", ".html")
 ```
 
 It keeps the same  `DebugMode` and `ReleaseMode` behaviour as the core Gin rendering. So in `DebugMode`, templates are hot-reloaded every time they are used.
@@ -30,7 +30,13 @@ Go templates work very well and are widely used. There is, however, an unfortuna
 
 So `gin-templates` provides a way to load templates without being affected by this issue. The template files can be organised in directories as needed and their names will reflect their path relative to the root directory of the templates.
 
-For example, if files `foo/home.html` and `foo/bar/baz.html` exist, when loaded they will have the same names, i.e. `foo/home.html` and `foo/bar/baz.html` respectively.
+For example, if the root folder is `templates` and if files `templates/foo/home.html` and `templates/foo/bar/baz.html` exist, when loaded they will have the names `foo/home.html` and `foo/bar/baz.html` respectively.
+
+As usual, your handlers will use `Context.HTML`, e.g
+
+```go
+c.HTML(200, "foo/html.html", dataModel)
+```
 
 ## Status
 

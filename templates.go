@@ -91,7 +91,7 @@ func findTemplates(rootDir, suffix string) map[string]os.FileInfo {
 func parseTemplates(root *template.Template, rootDir string, files map[string]os.FileInfo, funcMap template.FuncMap) *template.Template {
 	pfx := len(rootDir) + 1
 
-	for path, _ := range files {
+	for path := range files {
 		b, e2 := ioutil.ReadFile(path)
 		if e2 != nil {
 			panic(path + " " + e2.Error())

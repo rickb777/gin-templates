@@ -8,3 +8,5 @@ install:
 
 script:
   - go test -v ./...
+  - gofmt -l -s -w *.go
+  - git diff --exit-code

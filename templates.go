@@ -1,4 +1,4 @@
-package gin_templates
+package templates
 
 import (
 	"github.com/gin-gonic/gin"
@@ -20,8 +20,10 @@ type htmlDebug struct {
 	funcMap template.FuncMap
 }
 
-func LoadTemplates(engine *gin.Engine, dir, suffix string) render.HTMLRender {
-	funcMap := engine.FuncMap
+// LoadTemplates finds all the templates in the directory dir and its subdirectories
+// that have names ending with the given suffix. The function map can be nil if not
+// required.
+func LoadTemplates(dir, suffix string, funcMap template.FuncMap) render.HTMLRender {
 	if funcMap == nil {
 		funcMap = template.FuncMap{}
 	}
@@ -38,7 +40,7 @@ func LoadTemplates(engine *gin.Engine, dir, suffix string) render.HTMLRender {
 	parseTemplates(root, rootDir, files, funcMap)
 
 	if gin.IsDebugging() {
-		return htmlDebug{rootDir: rootDir, files: files, funcMap: engine.FuncMap}
+		return htmlDebug{rootDir: rootDir, files: files, funcMap: funcMap}
 	}
 
 	return htmlProduction{root: root}

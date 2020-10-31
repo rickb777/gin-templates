@@ -19,7 +19,8 @@ Given a directory `templates` containing your templates and given that their nam
 
 ```go
 engine := gin.New()
-engine.HTMLRender = gin_templates.LoadTemplates(engine, "templates", ".html")
+engine.FuncMap = (... as needed ...)
+engine.HTMLRender = gin_templates.LoadTemplates("templates", ".html", engine.FuncMap)
 ```
 
 This scans all ".html" files in `templates` and its subdirectories. So, for example, if files `templates/foo/home.html` and `templates/foo/bar/baz.html` exist, when loaded they will have the names `foo/home.html` and `foo/bar/baz.html` respectively.

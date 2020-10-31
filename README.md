@@ -13,6 +13,25 @@
 
     go get -u github.com/rickb777/gin-templates
 
+## Usage
+
+Given a directory `templates` containing your templates and given that their names all end in ".html", use this setup
+
+```go
+	engine := gin.New()
+	engine.HTMLRender := gin_templates.LoadTemplates(engine, "templates", ".html")
+```
+
+It keeps the same  `DebugMode` and `ReleaseMode` behaviour as the core Gin rendering. So in `DebugMode`, templates are hot-reloaded every time they are used.
+
+## Rationale
+
+Go templates work very well and are widely used. There is, however, an unfortunate feature of the main `template.ParseFiles` and `template.ParseGlob` functions only work well for small numbers of templates. The name they store of each template is based on the filename ignoring its path; therefore any name collisions cause templates to be unusable.
+
+So `gin-templates` provides a way to load templates without being affected by this issue. The template files can be organised in directories as needed and their names will reflect their path relative to the root directory of the templates.
+
+For example, if files `foo/home.html` and `foo/bar/baz.html` exist, when loaded they will have the same names, i.e. `foo/home.html` and `foo/bar/baz.html` respectively.
+
 ## Status
 
 This library is in early development.

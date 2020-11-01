@@ -1,16 +1,19 @@
 package templates
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/render"
+	"fmt"
 	"html/template"
-	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/render"
+	"github.com/spf13/afero"
 )
+
+var Fs = afero.NewOsFs()
 
 type htmlProduction struct {
 	root *template.Template
@@ -19,6 +22,7 @@ type htmlProduction struct {
 type htmlDebug struct {
 	root    *template.Template
 	rootDir string
+	suffix  string
 	files   map[string]time.Time
 	funcMap template.FuncMap
 }
@@ -39,11 +43,16 @@ func LoadTemplates(dir, suffix string, funcMap template.FuncMap) render.HTMLRend
 		panic("No HTML files were found in " + rootDir)
 	}
 
-	root := template.New("")
-	parseTemplates(root, rootDir, files, funcMap)
+	root := parseTemplates(rootDir, files, funcMap)
 
 	if gin.IsDebugging() {
-		return htmlDebug{rootDir: rootDir, root: root, files: files, funcMap: funcMap}
+		return htmlDebug{
+			root:    root,
+			rootDir: rootDir,
+			suffix:  suffix,
+			files:   files,
+			funcMap: funcMap,
+		}
 	}
 
 	return htmlProduction{root: root}
@@ -58,30 +67,38 @@ func (r htmlProduction) Instance(name string, data interface{}) render.Render {
 }
 
 func (r htmlDebug) Instance(name string, data interface{}) render.Render {
+	path := r.rootDir + "/" + name
+	if _, exists := r.files[path]; !exists {
+		r.files = findTemplates(r.rootDir, r.suffix)
+	}
 	return render.HTML{
-		Template: r.loadTemplate(),
+		Template: r.getCurrentTemplateTree(),
 		Name:     name,
 		Data:     data,
 	}
 }
 
-func (r htmlDebug) loadTemplate() *template.Template {
+func (r htmlDebug) getCurrentTemplateTree() *template.Template {
 	changed := checkForChanges(r.files)
-	return parseTemplates(r.root, r.rootDir, changed, r.funcMap)
+	if changed {
+		r.root = parseTemplates(r.rootDir, r.files, r.funcMap)
+	}
+	return r.root
 }
 
-func checkForChanges(files map[string]time.Time) map[string]time.Time {
-	changed := make(map[string]time.Time)
+func checkForChanges(files map[string]time.Time) bool {
+	changed := false
 	for path, modTime := range files {
-		fi, err := os.Stat(path)
+		fi, err := Fs.Stat(path)
 		if err == nil {
 			if fi.ModTime().After(modTime) {
 				files[path] = fi.ModTime()
-				changed[path] = fi.ModTime()
+				changed = true
 			}
-		} else {
-			log.Printf("%q err %v\n", path, err)
+		} else if !os.IsNotExist(err) {
+			delete(files, path)
 		}
+
 	}
 
 	return changed
@@ -91,9 +108,9 @@ func findTemplates(rootDir, suffix string) map[string]time.Time {
 	cleanRoot := filepath.Clean(rootDir)
 	files := make(map[string]time.Time)
 
-	err := filepath.Walk(cleanRoot, func(path string, info os.FileInfo, e1 error) error {
+	err := afero.Walk(Fs, cleanRoot, func(path string, info os.FileInfo, e1 error) error {
 		if e1 != nil {
-			panic("cannot load templates from " + rootDir + ": " + e1.Error())
+			panic(fmt.Sprintf("Cannot load templates from: %s: %v\n", rootDir, e1))
 		}
 
 		if !info.IsDir() && strings.HasSuffix(path, suffix) {
@@ -104,26 +121,27 @@ func findTemplates(rootDir, suffix string) map[string]time.Time {
 	})
 
 	if err != nil {
-		panic("cannot load templates from " + rootDir + ": " + err.Error())
+		panic(fmt.Sprintf("Cannot load templates from: %s: %v\n", rootDir, err))
 	}
 
 	return files
 }
 
-func parseTemplates(root *template.Template, rootDir string, files map[string]time.Time, funcMap template.FuncMap) *template.Template {
+func parseTemplates(rootDir string, files map[string]time.Time, funcMap template.FuncMap) *template.Template {
 	pfx := len(rootDir) + 1
+	root := template.New("")
 
 	for path := range files {
-		b, e2 := ioutil.ReadFile(path)
+		b, e2 := afero.ReadFile(Fs, path)
 		if e2 != nil {
-			panic(path + " " + e2.Error())
+			panic(fmt.Sprintf("Read template error: %s: %v\n", path, e2))
 		}
 
 		name := path[pfx:]
 		t := root.New(name).Funcs(funcMap)
 		t, e2 = t.Parse(string(b))
 		if e2 != nil {
-			panic(path + " " + e2.Error())
+			panic(fmt.Sprintf("Parse template error: %s: %v\n", path, e2))
 		}
 	}
 

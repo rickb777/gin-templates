@@ -3,6 +3,7 @@ package templates
 import (
 	"fmt"
 	"html/template"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,22 +16,28 @@ import (
 
 var Fs = afero.NewOsFs()
 
-type htmlProduction struct {
-	root *template.Template
+// ResponseProcessor interface creates the contract for custom content negotiation.
+// This matches processor.ResponseProcessor (github.com/rickb777/negotiator) without
+// introducing an explicit dependency.
+type ResponseProcessor interface {
+	// CanProcess is the predicate that determines whether this processor
+	// will handle a given request.
+	CanProcess(mediaRange string, lang string) bool
+	// Process renders the data model to the response writer, without setting any headers.
+	Process(w http.ResponseWriter, template string, dataModel interface{}) error
+	// ContentType gets the content type.
+	ContentType() string
 }
 
-type htmlDebug struct {
-	root    *template.Template
-	rootDir string
-	suffix  string
-	files   map[string]time.Time
-	funcMap template.FuncMap
+type HTMLProcessor interface {
+	render.HTMLRender
+	ResponseProcessor
 }
 
 // LoadTemplates finds all the templates in the directory dir and its subdirectories
 // that have names ending with the given suffix. The function map can be nil if not
 // required.
-func LoadTemplates(dir, suffix string, funcMap template.FuncMap) render.HTMLRender {
+func LoadTemplates(dir, suffix string, funcMap template.FuncMap) HTMLProcessor {
 	if funcMap == nil {
 		funcMap = template.FuncMap{}
 	}
@@ -46,63 +53,21 @@ func LoadTemplates(dir, suffix string, funcMap template.FuncMap) render.HTMLRend
 	root := parseTemplates(rootDir, files, funcMap)
 
 	if gin.IsDebugging() {
-		return htmlDebug{
-			root:    root,
-			rootDir: rootDir,
-			suffix:  suffix,
-			files:   files,
-			funcMap: funcMap,
+		return &processor{
+			HTMLRender: htmlDebug{
+				root:    root,
+				rootDir: rootDir,
+				suffix:  suffix,
+				files:   files,
+				funcMap: funcMap,
+			},
 		}
 	}
 
-	return htmlProduction{root: root}
+	return &processor{HTMLRender: htmlProduction{root: root}}
 }
 
-func (r htmlProduction) Instance(name string, data interface{}) render.Render {
-	return render.HTML{
-		Template: r.root,
-		Name:     name,
-		Data:     data,
-	}
-}
-
-func (r htmlDebug) Instance(name string, data interface{}) render.Render {
-	path := r.rootDir + "/" + name
-	if _, exists := r.files[path]; !exists {
-		r.files = findTemplates(r.rootDir, r.suffix)
-	}
-	return render.HTML{
-		Template: r.getCurrentTemplateTree(),
-		Name:     name,
-		Data:     data,
-	}
-}
-
-func (r htmlDebug) getCurrentTemplateTree() *template.Template {
-	changed := checkForChanges(r.files)
-	if changed {
-		r.root = parseTemplates(r.rootDir, r.files, r.funcMap)
-	}
-	return r.root
-}
-
-func checkForChanges(files map[string]time.Time) bool {
-	changed := false
-	for path, modTime := range files {
-		fi, err := Fs.Stat(path)
-		if err == nil {
-			if fi.ModTime().After(modTime) {
-				files[path] = fi.ModTime()
-				changed = true
-			}
-		} else if !os.IsNotExist(err) {
-			delete(files, path)
-		}
-
-	}
-
-	return changed
-}
+//-------------------------------------------------------------------------------------------------
 
 func findTemplates(rootDir, suffix string) map[string]time.Time {
 	cleanRoot := filepath.Clean(rootDir)
@@ -146,4 +111,32 @@ func parseTemplates(rootDir string, files map[string]time.Time, funcMap template
 	}
 
 	return root
+}
+
+//-------------------------------------------------------------------------------------------------
+
+const (
+	TextHtml         = "text/html"
+	ApplicationXhtml = "application/xhtml+xml"
+)
+
+// ContentType is the value returned when serving HTML files. This defaults to
+// TextHtml, but set it to ApplicationXhtml if more appropriate.
+var ContentType = TextHtml
+
+// processor adds methods to a HTMLRender to allow it to take part in content negotiation.
+type processor struct {
+	render.HTMLRender
+}
+
+func (p processor) CanProcess(mediaRange string, lang string) bool {
+	return mediaRange == TextHtml || mediaRange == ApplicationXhtml
+}
+
+func (p processor) Process(w http.ResponseWriter, template string, dataModel interface{}) error {
+	return p.Instance(template, dataModel).Render(w)
+}
+
+func (p processor) ContentType() string {
+	return ContentType
 }

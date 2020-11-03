@@ -24,6 +24,10 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 	r := templates.LoadTemplates("test-data", ".html", engine.FuncMap)
 
 	//---------- request 1 ----------
+	g.Expect(r.CanProcess("text/plain", "")).To(BeFalse())
+	g.Expect(r.CanProcess("text/html", "")).To(BeTrue())
+	g.Expect(r.ContentType()).To(Equal("text/html"))
+
 	w := httptest.NewRecorder()
 	t0 := time.Now()
 	instance := r.Instance("foo/home.html", map[string]string{"Title": "Hello"})
@@ -55,8 +59,11 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 	w = httptest.NewRecorder()
 	afero.WriteFile(rec.fs, "test-data/foo/bar/baz.html", []byte("<html>Updated</html>"), 0644)
 
-	instance = r.Instance("foo/bar/baz.html", map[string]string{"Title": "Hello"})
-	err = instance.Render(w)
+	templates.ContentType = templates.ApplicationXhtml
+	g.Expect(r.CanProcess("application/xhtml+xml", "")).To(BeTrue())
+	g.Expect(r.ContentType()).To(Equal("application/xhtml+xml"))
+
+	err = r.Process(w, "foo/bar/baz.html", map[string]string{"Title": "Hello"})
 	g.Expect(err).NotTo(HaveOccurred())
 
 	s = w.Body.String()
@@ -94,9 +101,8 @@ func TestProductionInstance_using_files(t *testing.T) {
 	g := NewGomegaWithT(t)
 	gin.SetMode(gin.ReleaseMode)
 	templates.Fs = afero.NewOsFs() // real test files
-	engine := gin.New()
 
-	r := templates.LoadTemplates("test-data", ".html", engine.FuncMap)
+	r := templates.LoadTemplates("test-data", ".html", nil)
 	w := httptest.NewRecorder()
 
 	err := r.Instance("foo/home.html", map[string]string{"Title": "Hello"}).Render(w)

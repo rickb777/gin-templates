@@ -63,8 +63,7 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 	g.Expect(r.CanProcess("application/xhtml+xml", "")).To(BeTrue())
 	g.Expect(r.ContentType()).To(Equal("application/xhtml+xml"))
 
-	err = r.Process(w, "foo/bar/baz.html", map[string]string{"Title": "Hello"})
-	g.Expect(err).NotTo(HaveOccurred())
+	r.Process(w, "foo/bar/baz.html", map[string]string{"Title": "Hello"})
 
 	s = w.Body.String()
 	g.Expect(s).To(ContainSubstring("Updated"))

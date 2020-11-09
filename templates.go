@@ -23,10 +23,11 @@ type ResponseProcessor interface {
 	// CanProcess is the predicate that determines whether this processor
 	// will handle a given request.
 	CanProcess(mediaRange string, lang string) bool
-	// Process renders the data model to the response writer, without setting any headers.
-	Process(w http.ResponseWriter, template string, dataModel interface{}) error
-	// ContentType gets the content type.
+	// ContentType returns the content type for this response.
 	ContentType() string
+	// Process renders the data model to the response writer, without setting any headers.
+	// If the processor encounters an error, it should panic.
+	Process(w http.ResponseWriter, template string, dataModel interface{})
 }
 
 type HTMLProcessor interface {
@@ -133,8 +134,11 @@ func (p processor) CanProcess(mediaRange string, lang string) bool {
 	return mediaRange == TextHtml || mediaRange == ApplicationXhtml
 }
 
-func (p processor) Process(w http.ResponseWriter, template string, dataModel interface{}) error {
-	return p.Instance(template, dataModel).Render(w)
+func (p processor) Process(w http.ResponseWriter, template string, dataModel interface{}) {
+	err := p.Instance(template, dataModel).Render(w)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (p processor) ContentType() string {

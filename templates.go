@@ -27,7 +27,7 @@ type ResponseProcessor interface {
 	ContentType() string
 	// Process renders the data model to the response writer, without setting any headers.
 	// If the processor encounters an error, it should panic.
-	Process(w http.ResponseWriter, template string, dataModel interface{})
+	Process(w http.ResponseWriter, template string, dataModel interface{}) error
 }
 
 type HTMLProcessor interface {
@@ -134,11 +134,8 @@ func (p processor) CanProcess(mediaRange string, lang string) bool {
 	return mediaRange == TextHtml || mediaRange == ApplicationXhtml
 }
 
-func (p processor) Process(w http.ResponseWriter, template string, dataModel interface{}) {
-	err := p.Instance(template, dataModel).Render(w)
-	if err != nil {
-		panic(err)
-	}
+func (p processor) Process(w http.ResponseWriter, template string, dataModel interface{}) error {
+	return p.Instance(template, dataModel).Render(w)
 }
 
 func (p processor) ContentType() string {

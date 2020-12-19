@@ -180,6 +180,10 @@ func (r *recorder) Chmod(name string, mode os.FileMode) error {
 	return r.fs.Chmod(name, mode)
 }
 
+func (r *recorder) Chown(name string, uid, gid int) error {
+	return r.fs.Chown(name, uid, gid)
+}
+
 func (r *recorder) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	return r.fs.Chtimes(name, atime, mtime)
 }

@@ -2,7 +2,7 @@ package templates_test
 
 import (
 	"github.com/gin-gonic/gin"
-	. "github.com/onsi/gomega"
+	"github.com/rickb777/expect"
 	"github.com/rickb777/gin-templates"
 	"github.com/spf13/afero"
 	"net/http/httptest"
@@ -12,7 +12,6 @@ import (
 )
 
 func TestDebugInstance_using_fakes(t *testing.T) {
-	g := NewGomegaWithT(t)
 	gin.SetMode(gin.DebugMode)
 	rec := &recorder{fs: afero.NewMemMapFs()}
 	templates.Fs = rec
@@ -24,20 +23,20 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 	r := templates.LoadTemplates("test-data", ".html", engine.FuncMap)
 
 	//---------- request 1 ----------
-	g.Expect(r.CanProcess("text/plain", "")).To(BeFalse())
-	g.Expect(r.CanProcess("text/html", "")).To(BeTrue())
-	g.Expect(r.ContentType()).To(Equal("text/html"))
+	expect.Bool(r.CanProcess("text/plain", "")).ToBeFalse(t)
+	expect.Bool(r.CanProcess("text/html", "")).ToBeTrue(t)
+	expect.String(r.ContentType()).ToBe(t, "text/html")
 
 	w := httptest.NewRecorder()
 	t0 := time.Now()
 	instance := r.Instance("foo/home.html", map[string]string{"Title": "Hello"})
 	d1 := time.Now().Sub(t0)
 	err := instance.Render(w)
-	g.Expect(err).NotTo(HaveOccurred())
+	expect.Error(err).Not().ToHaveOccurred(t)
 
 	s := w.Body.String()
-	g.Expect(s).To(ContainSubstring("Home"))
-	g.Expect(rec.opened).To(ContainElements("test-data/foo/home.html", "test-data/foo/bar/baz.html"))
+	expect.String(s).ToContain(t, "Home")
+	expect.Slice(rec.opened).ToContainAll(t, "test-data/foo/home.html", "test-data/foo/bar/baz.html")
 
 	//---------- request 2: no change so no parsing ----------
 	rec.opened = nil
@@ -47,12 +46,12 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 	instance = r.Instance("foo/home.html", map[string]string{"Title": "Hello"})
 	d2 := time.Now().Sub(t2)
 	err = instance.Render(w)
-	g.Expect(err).NotTo(HaveOccurred())
+	expect.Error(err).Not().ToHaveOccurred(t)
 
 	s = w.Body.String()
-	g.Expect(s).To(ContainSubstring("Home"))
-	g.Expect(rec.opened).To(BeEmpty())
-	g.Expect(d2).To(BeNumerically("<", d1)) // it should be faster
+	expect.String(s).ToContain(t, "Home")
+	expect.Slice(rec.opened).ToBeEmpty(t)
+	expect.Number(d2).ToBeLessThan(t, d1) // it should be faster
 
 	//---------- request 3: an altered file ----------
 	rec.opened = nil
@@ -60,14 +59,14 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 	afero.WriteFile(rec.fs, "test-data/foo/bar/baz.html", []byte("<html>Updated</html>"), 0644)
 
 	templates.ContentType = templates.ApplicationXhtml
-	g.Expect(r.CanProcess("application/xhtml+xml", "")).To(BeTrue())
-	g.Expect(r.ContentType()).To(Equal("application/xhtml+xml"))
+	expect.Bool(r.CanProcess("application/xhtml+xml", "")).ToBeTrue(t)
+	expect.String(r.ContentType()).ToBe(t, "application/xhtml+xml")
 
 	r.Process(w, "foo/bar/baz.html", map[string]string{"Title": "Hello"})
 
 	s = w.Body.String()
-	g.Expect(s).To(ContainSubstring("Updated"))
-	g.Expect(rec.opened).To(ContainElements("test-data/foo/home.html", "test-data/foo/bar/baz.html"))
+	expect.String(s).ToContain(t, "Updated")
+	expect.Slice(rec.opened).ToContainAll(t, "test-data/foo/home.html", "test-data/foo/bar/baz.html")
 
 	//---------- request 4: a new file ----------
 	rec.opened = nil
@@ -76,11 +75,11 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 
 	instance = r.Instance("foo/bar/new.html", map[string]string{"Title": "Hello"})
 	err = instance.Render(w)
-	g.Expect(err).NotTo(HaveOccurred())
+	expect.Error(err).Not().ToHaveOccurred(t)
 
 	s = w.Body.String()
-	g.Expect(s).To(ContainSubstring("New"))
-	g.Expect(rec.opened).To(ContainElements("test-data/foo/home.html", "test-data/foo/bar/baz.html", "test-data/foo/bar/new.html"))
+	expect.String(s).ToContain(t, "New")
+	expect.Slice(rec.opened).ToContainAll(t, "test-data/foo/home.html", "test-data/foo/bar/baz.html", "test-data/foo/bar/new.html")
 
 	//---------- request 5: ok after deleting a file ----------
 	rec.opened = nil
@@ -89,15 +88,14 @@ func TestDebugInstance_using_fakes(t *testing.T) {
 
 	instance = r.Instance("foo/bar/new.html", map[string]string{"Title": "Hello"})
 	err = instance.Render(w)
-	g.Expect(err).NotTo(HaveOccurred())
+	expect.Error(err).Not().ToHaveOccurred(t)
 
 	s = w.Body.String()
-	g.Expect(s).To(ContainSubstring("New"))
-	g.Expect(rec.opened).To(ContainElements("test-data/foo/home.html", "test-data/foo/bar/new.html"))
+	expect.String(s).ToContain(t, "New")
+	expect.Slice(rec.opened).ToContainAll(t, "test-data/foo/home.html", "test-data/foo/bar/new.html")
 }
 
 func TestProductionInstance_using_files(t *testing.T) {
-	g := NewGomegaWithT(t)
 	gin.SetMode(gin.ReleaseMode)
 	templates.Fs = afero.NewOsFs() // real test files
 
@@ -105,11 +103,11 @@ func TestProductionInstance_using_files(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	err := r.Instance("foo/home.html", map[string]string{"Title": "Hello"}).Render(w)
-	g.Expect(err).NotTo(HaveOccurred())
+	expect.Error(err).Not().ToHaveOccurred(t)
 
 	s := w.Body.String()
-	g.Expect(s).To(ContainSubstring("Hello"))
-	g.Expect(s).To(ContainSubstring("Home"))
+	expect.String(s).ToContain(t, "Hello")
+	expect.String(s).ToContain(t, "Home")
 }
 
 func mustContain(t *testing.T, ss []string, wanted ...string) {
